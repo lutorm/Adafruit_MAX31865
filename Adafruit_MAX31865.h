@@ -79,6 +79,7 @@ public:
   void enableBias(bool b);
 
   float temperature(float RTDnominal, float refResistor);
+  float temperature(float RTDnominal, float refResistor, bool & fault);
 
 private:
   Adafruit_SPIDevice spi_dev;

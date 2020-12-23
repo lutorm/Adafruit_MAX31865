@@ -61,10 +61,15 @@ bool Adafruit_MAX31865::begin(max31865_numwires_t wires) {
   setWires(wires);
   enableBias(false);
   autoConvert(false);
+
+  /* Re-assert the fault limits to the defaults, they were changing on me... */
+  writeRegister8(MAX31865_HFAULTMSB_REG, 0xff);
+  writeRegister8(MAX31865_HFAULTLSB_REG, 0xff);
+  writeRegister8(MAX31865_LFAULTMSB_REG, 0x00);
+  writeRegister8(MAX31865_LFAULTLSB_REG, 0x00);
+
   clearFault();
 
-  // Serial.print("config: ");
-  // Serial.println(readRegister8(MAX31865_CONFIG_REG), HEX);
   return true;
 }
 
@@ -159,21 +164,37 @@ void Adafruit_MAX31865::setWires(max31865_numwires_t wires) {
 
 /**************************************************************************/
 /*!
+    @brief Variant of temperature reading function that discards the fault bit.
+*/
+/**************************************************************************/
+float Adafruit_MAX31865::temperature(float RTDnominal, float refResistor)
+{
+    bool dummy;
+    return temperature(RTDnominal, refResistor, dummy);
+}
+
+/**************************************************************************/
+/*!
     @brief Read the temperature in C from the RTD through calculation of the
-    resistance. Uses
+    resistance, and return the fault bit from the temperature register. Uses
    http://www.analog.com/media/en/technical-documentation/application-notes/AN709_0.pdf
    technique
     @param RTDnominal The 'nominal' resistance of the RTD sensor, usually 100
     or 1000
     @param refResistor The value of the matching reference resistor, usually
     430 or 4300
+    @param fault Returns the value of the fault bit in the temperature register.
     @returns Temperature in C
 */
 /**************************************************************************/
-float Adafruit_MAX31865::temperature(float RTDnominal, float refResistor) {
+float Adafruit_MAX31865::temperature(float RTDnominal, float refResistor, bool & fault)
+{
   float Z1, Z2, Z3, Z4, Rt, temp;
 
-  Rt = readRTD();
+  uint16_t reg = readRTD();
+  fault = (reg & 0x0001);
+
+  Rt = (reg >> 1);
   Rt /= 32768;
   Rt *= refResistor;
 
@@ -213,7 +234,7 @@ float Adafruit_MAX31865::temperature(float RTDnominal, float refResistor) {
 /**************************************************************************/
 /*!
     @brief Read the raw 16-bit value from the RTD_REG in one shot mode
-    @return The raw unsigned 16-bit value, NOT temperature!
+    @return The raw unsigned 16-bit register value, NOT temperature!
 */
 /**************************************************************************/
 uint16_t Adafruit_MAX31865::readRTD(void) {
@@ -228,9 +249,6 @@ uint16_t Adafruit_MAX31865::readRTD(void) {
   uint16_t rtd = readRegister16(MAX31865_RTDMSB_REG);
 
   enableBias(false); // Disable bias current again to reduce selfheating.
-
-  // remove fault
-  rtd >>= 1;
 
   return rtd;
 }
